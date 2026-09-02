@@ -24,7 +24,7 @@
  * intDiv(7, 0)   === null
  */
 export function intDiv(a: number, b: number): number | null {
-  throw new Error('TODO 1.1: 实现 intDiv');
+  return b === 0 ? null : Math.trunc(a / b);
 }
 
 /**
@@ -44,7 +44,14 @@ export function intDiv(a: number, b: number): number | null {
  * parseIntStrict('9007199254740993') === null  // 超出安全整数范围
  */
 export function parseIntStrict(input: string): number | null {
-  throw new Error('TODO 1.2: 实现 parseIntStrict');
+  if (/^\s*[+-]?\d+\s*$/.test(input)) {
+      const res = parseInt(input);
+      if (res > Number.MAX_SAFE_INTEGER) {
+          return null;
+      }
+      return res;
+  }
+  return null;
 }
 
 /**
@@ -61,7 +68,7 @@ export function parseIntStrict(input: string): number | null {
  * isBlank(' a ')     === false
  */
 export function isBlank(value: string | null | undefined): boolean {
-  throw new Error('TODO 1.3: 实现 isBlank');
+  return value == null ? true : /^\s*$/.test(value);
 }
 
 /**
@@ -80,7 +87,7 @@ export function isBlank(value: string | null | undefined): boolean {
  * pickPort(undefined, 8080) === 8080
  */
 export function pickPort(raw: number | null | undefined, fallback: number): number {
-  throw new Error('TODO 1.4: 实现 pickPort');
+  return raw ?? fallback;
 }
 
 /**
@@ -93,7 +100,11 @@ export function pickPort(raw: number | null | undefined, fallback: number): numb
  *   （真值是：1, 'a', [], {}, '0'）
  */
 export function truthyCount(values: readonly unknown[]): number {
-  throw new Error('TODO 1.5: 实现 truthyCount');
+  let ret = 0;
+  for (const value of values) {
+      if (value) ret++;
+  }
+  return ret;
 }
 
 /**
@@ -113,7 +124,13 @@ export function truthyCount(values: readonly unknown[]): number {
  * kindOf(() => {})    === 'function'
  */
 export function kindOf(value: unknown): string {
-  throw new Error('TODO 1.6: 实现 kindOf');
+  if (typeof value == 'object') {
+      if (value == null) return 'null';
+      else if (Array.isArray(value)) return 'array';
+      else return 'object';
+  } else {
+      return typeof value;
+  }
 }
 
 /**
@@ -128,7 +145,7 @@ export function kindOf(value: unknown): string {
  * countCodePoints('')       === 0
  */
 export function countCodePoints(s: string): number {
-  throw new Error('TODO 1.7: 实现 countCodePoints');
+    return [...s].length;
 }
 
 /**
@@ -152,7 +169,7 @@ export interface RetryOptions {
 }
 
 export function describeRetry(options: RetryOptions): string {
-  throw new Error('TODO 1.8: 实现 describeRetry');
+    return (options?.label ?? 'task') + ': ' + (options?.times ?? 3) + ' 次重试, 间隔 ' + (options?.delayMs ?? 100) + 'ms';
 }
 
 /**
@@ -166,7 +183,15 @@ export function describeRetry(options: RetryOptions): string {
  * numberLines([])                    -> []
  */
 export function numberLines(lines: readonly string[]): string[] {
-  throw new Error('TODO 1.9: 实现 numberLines');
+  const ret : string[] = [];
+  let i = 1;
+  for (const line of lines) {
+      if (line.trim().length > 0) {
+          ret.push(i + ':' + line);
+          i++;
+      }
+  }
+  return ret;
 }
 
 /**
@@ -190,5 +215,21 @@ export interface KeyValueParseResult {
 }
 
 export function parseKeyValues(args: readonly string[]): KeyValueParseResult {
-  throw new Error('TODO 1.10: 实现 parseKeyValues');
+    const ret: KeyValueParseResult = {ok: true, entries: Array.of<[string, string]>(), errors: []};
+    for (const arg of args) {
+        if (arg.includes('=')) {
+            if (arg.startsWith('=')) {
+                ret.errors.push(arg);
+                continue;
+            }
+            const i = arg.indexOf('=');
+            ret.entries.push([arg.slice(0, i), arg.slice(i + 1)]);
+        } else {
+            ret.errors.push(arg);
+        }
+    }
+    if (ret.errors.length > 0) {
+        ret.ok = false;
+    }
+    return ret;
 }
