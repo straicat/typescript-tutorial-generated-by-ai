@@ -1,0 +1,30 @@
+{
+  "name": "ts-for-backend-devs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript 快速入门（面向有 Java/Go 经验的后端工程师）",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:solutions": "SOLUTIONS=1 vitest run",
+    "typecheck": "tsc --noEmit",
+    "ex": "tsx",
+    "cli": "tsx examples/cli/main.ts",
+    "agent": "tsx examples/agent/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "openai": "^7.8.0",
+    "zod": "^4.5.4"
+  }
+}

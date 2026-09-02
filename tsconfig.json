@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    /* ---- 目标运行时：Node 20+ / 24 ---- */
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+
+    /* ---- 只做类型检查，运行交给 tsx / vitest ---- */
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+
+    /* ---- 严格模式：从 Java/Go 过来务必全开 ---- */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+
+    /* ---- 路径别名：测试用它在 exercises / solutions 之间切换 ---- */
+    "baseUrl": ".",
+    "paths": {
+      "@exercises/*": ["exercises/*.ts"]
+    },
+
+    "types": ["node"]
+  },
+  "include": ["exercises", "solutions", "tests", "examples", "docs/snippets", "*.ts"]
+}

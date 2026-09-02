@@ -1,0 +1,14 @@
+{"ts":"2024-05-01T09:00:00Z","level":"info","svc":"api","msg":"server started","http":{"status":200,"path":"/healthz"},"durationMs":3}
+{"ts":"2024-05-01T09:00:04Z","level":"info","svc":"api","msg":"GET /users","http":{"status":200,"path":"/users"},"durationMs":18}
+{"ts":"2024-05-01T09:00:07Z","level":"warn","svc":"api","msg":"slow query","http":{"status":200,"path":"/users"},"durationMs":840,"tags":["db","slow"]}
+{"ts":"2024-05-01T09:00:11Z","level":"error","svc":"api","msg":"upstream timeout","http":{"status":504,"path":"/orders"},"durationMs":3000,"tags":["upstream"]}
+{"ts":"2024-05-01T09:00:12Z","level":"info","svc":"worker","msg":"job picked","jobId":"j-1001"}
+{"ts":"2024-05-01T09:00:15Z","level":"error","svc":"worker","msg":"job failed","jobId":"j-1001","retries":3,"tags":["job"]}
+{"ts":"2024-05-01T09:00:19Z","level":"debug","svc":"worker","msg":"retry scheduled","jobId":"j-1001","retries":1}
+
+{"ts":"2024-05-01T09:00:23Z","level":"info","svc":"api","msg":"POST /orders","http":{"status":201,"path":"/orders"},"durationMs":64}
+{"ts":"2024-05-01T09:00:25Z","level":"error","svc":"api","msg":"validation failed","http":{"status":422,"path":"/orders"},"durationMs":7,"tags":["validation"]}
+{"ts": "2024-05-01T09:00:26Z", "level": "info", oops this line is not json}
+{"ts":"2024-05-01T09:00:29Z","level":"warn","svc":"worker","msg":"queue depth high","queueDepth":1284}
+["this","is","an","array","not","an","object"]
+{"ts":"2024-05-01T09:00:33Z","level":"info","svc":"api","msg":"GET /orders/1","http":{"status":200,"path":"/orders/1"},"durationMs":11}
