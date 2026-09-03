@@ -46,7 +46,13 @@ export interface HasSize {
  * // 对象字面量会触发多余属性检查（excess property check），细节见文档 §2
  */
 export function sumSizes(items: readonly HasSize[]): number {
-  throw new Error('TODO 2.1: 实现 sumSizes');
+    let res = 0;
+    for (const item of items) {
+        if (Number.isFinite(item.size)) {
+            res += item.size;
+        }
+    }
+    return res;
 }
 
 /* ------------------------------------------------------------------ *
@@ -70,7 +76,15 @@ export function sumSizes(items: readonly HasSize[]): number {
  * isStringArray({ 0: 'a', length: 1 }) === false   // 类数组对象也不算
  */
 export function isStringArray(value: unknown): value is string[] {
-  throw new Error('TODO 2.2: 实现 isStringArray');
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            if (typeof item !== 'string') {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 /* ------------------------------------------------------------------ *
@@ -99,7 +113,19 @@ export function isStringArray(value: unknown): value is string[] {
  * parsePort(['80'])    === null    // 😱 Number(['80']) === 80
  */
 export function parsePort(value: unknown): number | null {
-  throw new Error('TODO 2.3: 实现 parsePort');
+    if (typeof value === 'number') {
+        if (Number.isFinite(value) && value >= 1 && value <= 65535 && value % 1 === 0) {
+            return value;
+        }
+    } else if (typeof value === 'string') {
+        if (/^\s*\d+\s*$/.test(value)) {
+            let val: number = Number(value);
+            if (val >= 1 && val <= 65535) {
+                return val;
+            }
+        }
+    }
+    return null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -127,7 +153,10 @@ export type UserId = Brand<string, 'UserId'>;
  * toUserId(' u_a1b2 ') === null      // 不做 trim，整串必须匹配
  */
 export function toUserId(raw: string): UserId | null {
-  throw new Error('TODO 2.4: 实现 toUserId');
+    if (/^u_[0-9a-z]{4,}$/.test(raw)) {
+        return raw as UserId;
+    }
+    return null;
 }
 
 /**
@@ -140,7 +169,9 @@ export function toUserId(raw: string): UserId | null {
  * joinUserIds([id1, id2])           === 'u_a1b2,u_c3d4'
  */
 export function joinUserIds(ids: readonly UserId[]): string {
-  throw new Error('TODO 2.4b: 实现 joinUserIds');
+    const arr: string[] = [];
+    ids.forEach(id => arr.push(id));
+    return arr.join(',');
 }
 
 /* ------------------------------------------------------------------ *
@@ -171,7 +202,7 @@ export type Expr =
  * assertNever({ kind: 'mod' } as never)  // throws Error，message 含 '{"kind":"mod"}'
  */
 export function assertNever(value: never): never {
-  throw new Error('TODO 2.5a: 实现 assertNever');
+    throw new Error(`${JSON.stringify(value)}`);
 }
 
 /**
@@ -187,7 +218,17 @@ export function assertNever(value: never): never {
  * evalExpr({ kind: 'div', left: lit(1), right: lit(0) })                   // throws
  */
 export function evalExpr(expr: Expr): number {
-  throw new Error('TODO 2.5b: 实现 evalExpr');
+    switch (expr.kind) {
+        case 'lit': return expr.value;
+        case 'neg': return -evalExpr(expr.operand);
+        case 'add': return evalExpr(expr.left) + evalExpr(expr.right);
+        case 'mul': return evalExpr(expr.left) * evalExpr(expr.right);
+        case 'div':
+            const right = evalExpr(expr.right);
+            if (right === 0) throw new Error('division by zero');
+            return evalExpr(expr.left) / right;
+        default: return assertNever(expr);
+    }
 }
 
 /* ------------------------------------------------------------------ *
@@ -226,7 +267,16 @@ export type TaskEvent =
  *   -> { kind: 'idle' }              // 非法迁移，原样返回
  */
 export function nextState(state: TaskState, event: TaskEvent): TaskState {
-  throw new Error('TODO 2.6: 实现 nextState');
+    if (event.kind === 'reset') return { kind: 'idle' };
+    switch (state.kind) {
+        case 'idle':
+            if (event.kind === 'start') return { kind: 'running', startedAt: event.at };
+            return state;
+        case 'running':
+            if (event.kind === 'finish') return { kind: 'done', durationMs: event.at - state.startedAt };
+            else if (event.kind === 'fail') return { kind: 'failed', reason: event.reason };
+    }
+    return state;
 }
 
 /* ------------------------------------------------------------------ *
@@ -250,7 +300,7 @@ export type Result<T, E> =
  * ok(1)  -> { kind: 'ok', value: 1 }
  */
 export function ok<T>(value: T): Result<T, never> {
-  throw new Error('TODO 2.7a: 实现 ok');
+    return { kind: 'ok', value: value };
 }
 
 /**
@@ -259,7 +309,7 @@ export function ok<T>(value: T): Result<T, never> {
  * err('boom') -> { kind: 'err', error: 'boom' }
  */
 export function err<E>(error: E): Result<never, E> {
-  throw new Error('TODO 2.7b: 实现 err');
+    return { kind: 'err', error: error };
 }
 
 /**
@@ -274,7 +324,8 @@ export function err<E>(error: E): Result<never, E> {
  * unwrapOr(err('x'), 9)     === 9
  */
 export function unwrapOr<T, E>(result: Result<T, E>, fallback: T): T {
-  throw new Error('TODO 2.7c: 实现 unwrapOr');
+    if (result.kind === 'ok') return result.value;
+    return fallback;
 }
 
 /**
@@ -288,7 +339,8 @@ export function unwrapOr<T, E>(result: Result<T, E>, fallback: T): T {
  *   ↑ err 分支里 fn 一次都不能被调用
  */
 export function mapResult<T, E, U>(result: Result<T, E>, fn: (value: T) => U): Result<U, E> {
-  throw new Error('TODO 2.8a: 实现 mapResult');
+    if (result.kind === 'ok') return { kind: 'ok', value: fn(result.value) };
+    return result;
 }
 
 /**
@@ -305,7 +357,8 @@ export function andThen<T, E, U, F>(
   result: Result<T, E>,
   fn: (value: T) => Result<U, F>,
 ): Result<U, E | F> {
-  throw new Error('TODO 2.8b: 实现 andThen');
+    if (result.kind === 'ok') return fn(result.value);
+    return result;
 }
 
 /* ------------------------------------------------------------------ *
@@ -330,7 +383,15 @@ export function groupBy<T, K extends string>(
   items: readonly T[],
   keyOf: (item: T) => K,
 ): Record<K, T[]> {
-  throw new Error('TODO 2.9: 实现 groupBy');
+    const res = {} as Record<K, T[]>;
+    for (const item of items) {
+        const key = keyOf(item);
+        if (res[key] === undefined) {
+            res[key] = [];
+        }
+        res[key].push(item);
+    }
+    return res;
 }
 
 /* ------------------------------------------------------------------ *
@@ -354,7 +415,13 @@ export function pick<T extends object, K extends keyof T>(
   obj: T,
   keys: readonly K[],
 ): Pick<T, K> {
-  throw new Error('TODO 2.10: 实现 pick');
+    const res = {} as Pick<T, K>;
+    for (const key of keys) {
+        if (Object.hasOwn(obj, key)) {
+            res[key] = obj[key];
+        }
+    }
+    return res;
 }
 
 /* ------------------------------------------------------------------ *
@@ -396,7 +463,7 @@ export type CommandName = keyof typeof COMMANDS;
  * isCommandName('toString') === false // 😱 别用 `input in COMMANDS`，原型链上的属性会误判
  */
 export function isCommandName(input: string): input is CommandName {
-  throw new Error('TODO 2.11: 实现 isCommandName');
+    return Object.hasOwn(COMMANDS, input);
 }
 
 /* ------------------------------------------------------------------ *
@@ -436,7 +503,23 @@ export type CliError =
  *   -> { kind: 'err', error: { kind: 'unknown-command', input: 'nope' } }
  */
 export function runCommandLine(argv: readonly string[]): Result<string, CliError> {
-  throw new Error('TODO 2.12a: 实现 runCommandLine');
+    if (argv.length === 0) return { kind: 'err', error: { kind: 'empty' } };
+    const cmdName = argv[0] as string;
+    let targetCmdName: string | undefined;
+    for (const cmd of Object.getOwnPropertyNames(COMMANDS)) {
+        if (cmd === cmdName) targetCmdName = cmd;
+        else if ((COMMANDS[cmd as CommandName] as CommandSpec).aliases?.includes(cmdName)) targetCmdName = cmd;
+    }
+    if (targetCmdName === undefined) {
+        return { kind: 'err', error: { kind: 'unknown-command', input: cmdName } };
+    }
+    let argValArr: string[] = [];
+    for (let [i, argName] of COMMANDS[targetCmdName as CommandName].args.entries()) {
+        if (argv[i+1] === undefined) return { kind: 'err', error: { kind: 'missing-args', command: targetCmdName,
+                expected: COMMANDS[targetCmdName as CommandName].args.length, got: argv.length - 1} as CliError };
+        argValArr.push(argName+'='+argv[i+1]);
+    }
+    return { kind: 'ok', value: targetCmdName + '(' + argValArr.join(', ') + ')' };
 }
 
 /**
@@ -452,7 +535,12 @@ export function runCommandLine(argv: readonly string[]): Result<string, CliError
  *   === 'copy 需要 2 个参数，实际收到 1 个'
  */
 export function formatCliError(error: CliError): string {
-  throw new Error('TODO 2.12b: 实现 formatCliError');
+    switch (error.kind) {
+        case 'empty': return '缺少命令，可用命令: init, run, copy';
+        case 'unknown-command': return '未知命令: ' + error.input;
+        case 'missing-args': return error.command + ` 需要 ${error.expected} 个参数，实际收到 ${error.got} 个`;
+        default: assertNever(error);
+    }
 }
 
 /* ==================================================================== *
