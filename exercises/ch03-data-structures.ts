@@ -28,7 +28,7 @@
  * dedupe([NaN, NaN, 0, -0])      -> [NaN, 0]      // NaN 只留一个，-0 被 0 吸收
  */
 export function dedupe<T>(values: readonly T[]): T[] {
-  throw new Error('TODO 3.1: 实现 dedupe');
+  return [...new Set(values)];
 }
 
 /**
@@ -44,7 +44,12 @@ export function dedupe<T>(values: readonly T[]): T[] {
  * chunk([1], 0)              -> 抛 Error
  */
 export function chunk<T>(items: readonly T[], size: number): T[][] {
-  throw new Error('TODO 3.2: 实现 chunk');
+  if (!(size > 0 && Number.isInteger(size))) throw new Error('size 不是正整数');
+  const res: T[][] = [];
+  for (let i = 0; i < items.length; i+=size) {
+      res.push(items.slice(i, i+size));
+  }
+  return res;
 }
 
 /**
@@ -73,7 +78,13 @@ export interface Player {
 }
 
 export function rankPlayers(players: readonly Player[]): Player[] {
-  throw new Error('TODO 3.3: 实现 rankPlayers');
+  return players.toSorted((a, b) => {
+      if (a.score == b.score) {
+          if (a.level == b.level) {
+              return a.name.localeCompare(b.name);
+          } return b.level - a.level;
+      } return b.score - a.score;
+  })
 }
 
 /**
@@ -92,7 +103,16 @@ export function rankPlayers(players: readonly Player[]): Player[] {
  * minMaxAvg([])             -> null
  */
 export function minMaxAvg(values: readonly number[]): readonly [number, number, number] | null {
-  throw new Error('TODO 3.4: 实现 minMaxAvg');
+  if (values.length === 0) return null;
+  let res = [Infinity, -Infinity, 0] as [number, number, number];
+  for (const value of values) {
+      if (value === undefined) continue;
+      res[0] = Math.min(res[0], value);
+      res[1] = Math.max(res[1], value);
+      res[2] += value;
+  }
+  res[2] = Math.round(res[2] / values.length * 100) / 100;
+  return res;
 }
 
 /**
@@ -110,7 +130,17 @@ export function minMaxAvg(values: readonly number[]): readonly [number, number, 
  * topWords(['a'], 0)                           -> []
  */
 export function topWords(words: readonly string[], n: number): Array<[string, number]> {
-  throw new Error('TODO 3.5: 实现 topWords');
+  if (n <= 0) return [];
+  const m = new Map<string, number>();
+  for (let w of words) {
+    w = w.trim();
+    if (w.length === 0) continue;
+    m.set(w, (m.get(w) ?? 0) + 1);
+  }
+  return [...m.entries()].sort((a, b) => {
+    if (a[1] === b[1]) return a[0].localeCompare(b[0]);
+    return b[1] - a[1];
+  }).slice(0, n);
 }
 
 /**
@@ -127,7 +157,13 @@ export function topWords(words: readonly string[], n: number): Array<[string, nu
  * groupBy([], (n: number) => n)  -> Map {}
  */
 export function groupBy<T, K>(items: readonly T[], keyOf: (item: T) => K): Map<K, T[]> {
-  throw new Error('TODO 3.6: 实现 groupBy');
+  const m = new Map<K, T[]>();
+  for (let item of items) {
+    const k = keyOf(item);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)?.push(item);
+  }
+  return m;
 }
 
 /**
@@ -147,7 +183,15 @@ export function groupBy<T, K>(items: readonly T[], keyOf: (item: T) => K): Map<K
 export type NestedNumbers = ReadonlyArray<number | NestedNumbers>;
 
 export function flattenDeep(input: NestedNumbers): number[] {
-  throw new Error('TODO 3.7: 实现 flattenDeep');
+  const res: number[] = [];
+  for (const item of input) {
+    if (typeof item === 'number') {
+      res.push(item);
+    } else {
+      res.push(...flattenDeep(item));
+    }
+  }
+  return res;
 }
 
 /**
@@ -171,7 +215,17 @@ export interface SetDiff {
 }
 
 export function compareSets(a: readonly string[], b: readonly string[]): SetDiff {
-  throw new Error('TODO 3.8: 实现 compareSets');
+  const aSet = new Set<string>(a);
+  const bSet = new Set<string>(b);
+  const both = new Set<string>(), onlyA = new Set<string>(), onlyB = new Set<string>();
+  for (let v of a) {
+    if (bSet.has(v)) both.add(v);
+    else onlyA.add(v);
+  }
+  for (let v of b) {
+    if (!aSet.has(v)) onlyB.add(v);
+  }
+  return { both: [...both], onlyA: [...onlyA], onlyB: [...onlyB] };
 }
 
 /**
@@ -196,7 +250,16 @@ export interface ServiceStat {
 }
 
 export function serviceStats(samples: Readonly<Record<string, readonly number[]>>): ServiceStat[] {
-  throw new Error('TODO 3.9: 实现 serviceStats');
+  const res: ServiceStat[] = [];
+  for (let [name, sample] of Object.entries(samples)) {
+    const total = sample.reduce((a, b) => a + b, 0);
+    res.push({ name: name, count: sample.length, total: total, avg: sample.length === 0 ? 0 : Math.round(total / sample.length * 100) / 100 });
+  }
+  res.sort((a, b) => {
+    if (a.total == b.total) return a.name.localeCompare(b.name);
+    return b.total - a.total;
+  })
+  return res;
 }
 
 /**
@@ -219,7 +282,22 @@ export function serviceStats(samples: Readonly<Record<string, readonly number[]>
 export type PlainObject = Record<string, unknown>;
 
 export function deepMerge(base: Readonly<PlainObject>, patch: Readonly<PlainObject>): PlainObject {
-  throw new Error('TODO 3.10: 实现 deepMerge');
+  const res: PlainObject = {};
+  for (const [k, v] of Object.entries(base)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    res[k] = v;
+  }
+  const isPlain = (x: unknown) => typeof x === 'object' && x !== null && !Array.isArray(x);
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    if (v === undefined) continue;
+    if (isPlain(res[k]) && isPlain(v)) {
+      res[k] = deepMerge(res[k] as PlainObject, v as PlainObject);
+    } else {
+      res[k] = v;
+    }
+  }
+  return res;
 }
 
 /**
@@ -244,7 +322,14 @@ export function deepMerge(base: Readonly<PlainObject>, patch: Readonly<PlainObje
 export type JsonParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 export function safeJsonParse<T>(raw: string, isValid: (value: unknown) => value is T): JsonParseResult<T> {
-  throw new Error('TODO 3.11: 实现 safeJsonParse');
+  let j: unknown;
+  try {
+    j = JSON.parse(raw);
+  } catch (SyntaxError) {
+    return { ok: false, error: 'invalid json' };
+  }
+  if (isValid(j)) return { ok: true, value: j };
+  return { ok: false, error: 'invalid shape' };
 }
 
 /**
@@ -269,5 +354,23 @@ export function* windows<T>(
   size: number,
   step = 1,
 ): Generator<T[], void, undefined> {
-  throw new Error('TODO 3.12: 实现 windows');
+  if (!(size > 0 && Number.isInteger(size))) {
+    throw new Error('size 不是正整数');
+  }
+  if (!(step > 0 && Number.isInteger(step))) {
+    throw new Error('step 不是正整数');
+  }
+  const res: T[] = [];
+  let i = 0, k = 0;
+  for (const item of source) {
+    if (i >= step*k && i < step*k+size) {
+      res.push(item);
+      if (res.length == size) {
+        yield [...res];
+        k++;
+        res.splice(0, step);
+      }
+    }
+    i++;
+  }
 }
