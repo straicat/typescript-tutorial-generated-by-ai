@@ -22,7 +22,7 @@
  * shout(41)  === '41!'
  */
 export function compose<A, B, C>(g: (b: B) => C, f: (a: A) => B): (a: A) => C {
-  throw new Error('TODO 4.1: 实现 compose');
+  return a => g(f(a));
 }
 
 /**
@@ -38,7 +38,7 @@ export function compose<A, B, C>(g: (b: B) => C, f: (a: A) => B): (a: A) => C {
  * pipeAll<number>((n) => n + 1, (n) => n * 2)(3) === 8   // 先加后乘：(3+1)*2
  */
 export function pipeAll<T>(...steps: ReadonlyArray<(value: T) => T>): (value: T) => T {
-  throw new Error('TODO 4.2: 实现 pipeAll');
+  return value => steps.reduce((acc, cur) => acc = cur(acc), value);
 }
 
 /**
@@ -57,7 +57,11 @@ export function pipeAll<T>(...steps: ReadonlyArray<(value: T) => T>): (value: T)
 export function curry3<A, B, C, R>(
   fn: (a: A, b: B, c: C) => R,
 ): (a: A) => (b: B) => (c: C) => R {
-  throw new Error('TODO 4.3: 实现 curry3');
+  return a => {
+    return b => {
+      return c => fn(a, b, c);
+    }
+  }
 }
 
 /**
@@ -74,7 +78,15 @@ export function curry3<A, B, C, R>(
  * n           === 1
  */
 export function once<Args extends unknown[], R>(fn: (...args: Args) => R): (...args: Args) => R {
-  throw new Error('TODO 4.4: 实现 once');
+  let cache: R;
+  let first = true;
+  return (...args) => {
+    if (first && cache === undefined) {
+      cache = fn(...args);
+      first = false;
+    }
+    return cache;
+  };
 }
 
 /**
@@ -97,7 +109,14 @@ export function memoize<A, R>(
   fn: (arg: A) => R,
   keyOf: (arg: A) => string = (value) => String(value),
 ): (arg: A) => R {
-  throw new Error('TODO 4.5: 实现 memoize');
+  const m = new Map<string, R>();
+  return arg => {
+    const k = keyOf(arg);
+    if (m.has(k)) return m.get(k)!;
+    const v = fn(arg);
+    m.set(k, v);
+    return v;
+  }
 }
 
 /**
@@ -122,7 +141,16 @@ export function throttle<Args extends unknown[]>(
   intervalMs: number,
   now: () => number,
 ): (...args: Args) => boolean {
-  throw new Error('TODO 4.6: 实现 throttle');
+  let lastHit: number | undefined;
+  return (...args) => {
+    const t = now();
+    if (lastHit === undefined || t >= lastHit + intervalMs) {
+      fn(...args);
+      lastHit = t;
+      return true;
+    }
+    return false;
+  }
 }
 
 /**
@@ -143,7 +171,19 @@ export function withRetry<Args extends unknown[], R>(
   maxAttempts: number,
   onRetry?: (attempt: number, error: unknown) => void,
 ): (...args: Args) => R {
-  throw new Error('TODO 4.7: 实现 withRetry');
+  if (maxAttempts < 1) throw new RangeError();
+  return (...args) => {
+    let lastErr: unknown|undefined;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return fn(...args);
+      } catch (error) {
+        lastErr = error;
+        if (onRetry !== undefined) onRetry(attempt, error);
+      }
+    }
+    throw lastErr;
+  }
 }
 
 /**
@@ -163,12 +203,10 @@ export function withRetry<Args extends unknown[], R>(
 export class Greeter {
   constructor(private readonly prefix: string) {}
 
-  greet(name: string): string {
-    throw new Error('TODO 4.8: 让 greet 在被解构 / 当回调传递时也能工作');
-  }
+  readonly greet = (name: string) => `${this.prefix}, ${name}!`;
 
   greetAll(names: readonly string[]): string[] {
-    throw new Error('TODO 4.8: 用 names.map(this.greet) 实现 greetAll');
+    return names.map(this.greet);
   }
 }
 
@@ -198,31 +236,33 @@ export class BoundedStack<T> {
   #capacity = 0;
 
   constructor(capacity: number) {
-    throw new Error('TODO 4.9: 校验 capacity 并保存到 #capacity');
+    if (!(capacity > 0 && Number.isInteger(capacity))) throw new RangeError();
+    this.#capacity = capacity;
   }
 
   get capacity(): number {
-    throw new Error('TODO 4.9: 实现 capacity getter');
+    return this.#capacity;
   }
 
   get size(): number {
-    throw new Error('TODO 4.9: 实现 size getter');
+    return this.#items.length;
   }
 
   push(item: T): void {
-    throw new Error('TODO 4.9: 实现 push（满了抛 RangeError）');
+    if (this.size === this.#capacity) throw new RangeError();
+    this.#items.push(item);
   }
 
   pop(): T | undefined {
-    throw new Error('TODO 4.9: 实现 pop');
+    return this.#items.pop();
   }
 
   peek(): T | undefined {
-    throw new Error('TODO 4.9: 实现 peek');
+    return this.#items.at(-1);
   }
 
   toArray(): T[] {
-    throw new Error('TODO 4.9: 实现 toArray（返回拷贝）');
+    return [...this.#items];
   }
 }
 
@@ -254,7 +294,12 @@ export abstract class ReportFormatter {
   protected abstract formatRow(row: ReportRow): string;
 
   render(rows: readonly ReportRow[]): string {
-    throw new Error('TODO 4.10: 实现模板方法 render');
+    let res = `${this.id}:`
+    if (rows.length === 0) return `${res} (empty)`;
+    for (const row of rows) {
+      res += '\n' + this.formatRow(row);
+    }
+    return res;
   }
 }
 
@@ -262,7 +307,7 @@ export class CsvFormatter extends ReportFormatter {
   override readonly id = 'csv';
 
   protected override formatRow(row: ReportRow): string {
-    throw new Error('TODO 4.10: 实现 CsvFormatter.formatRow');
+    return `${row.name},${row.count}`;
   }
 }
 
@@ -270,7 +315,7 @@ export class JsonLinesFormatter extends ReportFormatter {
   override readonly id = 'json';
 
   protected override formatRow(row: ReportRow): string {
-    throw new Error('TODO 4.10: 实现 JsonLinesFormatter.formatRow');
+    return '{"name":"'+row.name+'","count":'+row.count+'}'
   }
 }
 
@@ -315,13 +360,21 @@ export class NotFoundError extends AppError {
     readonly id: string,
   ) {
     // TODO 4.11(a): 用正确的 message / code 调用 super，并设置 this.name
-    super('', '');
-    throw new Error('TODO 4.11(a): 实现 NotFoundError');
+    super(`${resource} not found: ${id}`, 'NOT_FOUND');
+    this.name = 'NotFoundError';
   }
 }
 
 export function describeError(err: unknown): string {
-  throw new Error('TODO 4.11(b): 实现 describeError');
+  if (err instanceof NotFoundError) {
+    return `404 ${err.resource}#${err.id}`;
+  } else if (err instanceof AppError) {
+    return `app[${err.code}] ${err.message}`;
+  } else if (err instanceof Error) {
+    return `error ${err.message}`;
+  } else {
+    return `unknown ${String(err)}`;
+  }
 }
 
 /**
@@ -373,16 +426,25 @@ export class InMemoryUserRepository implements UserReader, UserWriter {
   ) {}
 
   add(id: string, name: string): User {
-    throw new Error('TODO 4.12: 实现 add');
+    if (this.#users.has(id)) throw new Error(`duplicate id: ${id}`);
+    else if (this.count() === this.maxUsers) throw new RangeError('repository is full');
+    const u: User = {id, name, createdAt: this.now()}
+    this.#users.set(id, u);
+    return u;
   }
 
   count(): number {
-    throw new Error('TODO 4.12: 实现 count');
+    return this.#users.size;
   }
 
   find(id: string): User | undefined;
   find(ids: readonly string[]): User[];
   find(arg: string | readonly string[]): User | User[] | undefined {
-    throw new Error('TODO 4.12: 实现 find（一个实现服务两个重载签名）');
+    if (typeof arg === 'string') {
+      return this.#users.get(arg);
+    } else if (Array.isArray(arg)) {
+      return arg.map(a => this.#users.get(a)).filter((a): a is User => a !== undefined);
+    }
+    return;
   }
 }
