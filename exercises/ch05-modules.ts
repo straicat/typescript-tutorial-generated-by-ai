@@ -37,7 +37,21 @@ import { basename, resolve } from 'node:path';
 export type PluginName = 'hash' | 'platform' | 'cpus';
 
 export async function loadPlugin(name: PluginName): Promise<string> {
-  throw new Error('TODO 5.1: 实现 loadPlugin');
+  switch (name) {
+    case 'hash': {
+      const crypto = await import('node:crypto');
+      return crypto.createHash('sha256').update('typescript').digest('hex');
+    }
+    case 'platform': {
+      const os = await import('node:os');
+      return os.platform();
+    }
+    case 'cpus': {
+      const os = await import('node:os');
+      return String(os.cpus().length);
+    }
+     default: throw new Error('unknown plugin');
+  }
 }
 
 /**
@@ -52,7 +66,7 @@ export async function loadPlugin(name: PluginName): Promise<string> {
  * getCurrentDirName() === 'exercises'
  */
 export function getCurrentDirName(): string {
-  throw new Error('TODO 5.2: 实现 getCurrentDirName');
+  return import.meta.dirname.split('/').at(-1) as string;
 }
 
 /**
@@ -67,7 +81,7 @@ export function getCurrentDirName(): string {
  * resolveFromHere('/etc/hosts')       -> '/etc/hosts'    // 绝对路径原样返回
  */
 export function resolveFromHere(relative: string): string {
-  throw new Error('TODO 5.3: 实现 resolveFromHere');
+  return resolve(import.meta.dirname, relative);
 }
 
 /**
@@ -99,19 +113,38 @@ export interface TableRow {
 export type Formatter = (rows: readonly TableRow[]) => string;
 
 export function formatAsJson(rows: readonly TableRow[]): string {
-  throw new Error('TODO 5.4: 实现 formatAsJson');
+  return JSON.stringify(rows);
 }
 
 export function formatAsCsv(rows: readonly TableRow[]): string {
-  throw new Error('TODO 5.4: 实现 formatAsCsv');
+  if (rows.length == 0) return '';
+  const head = Object.keys(rows[0] as TableRow);
+  return head.join(',') + '\n' + (rows.map(r => {
+    const vals: string[] = [];
+    for (const h of head) {
+      vals.push(r[h] as string);
+    }
+    return vals.join(',')
+  })).join('\n')
 }
 
 export function formatAsLines(rows: readonly TableRow[]): string {
-  throw new Error('TODO 5.4: 实现 formatAsLines');
+  return (rows.map(r => {
+    const vals: string[] = [];
+    for (const [k,v] of Object.entries(r)) {
+      vals.push(`${k}=${v}`)
+    }
+    return vals.join(' ');
+  })).join('\n')
 }
 
 export function getFormatter(name: string): Formatter | undefined {
-  throw new Error('TODO 5.4: 实现 getFormatter（内部建一个 registry 对象）');
+  switch (name) {
+    case 'json': return formatAsJson;
+    case 'csv': return formatAsCsv;
+    case 'lines': return formatAsLines;
+    default: return;
+  }
 }
 
 /**
@@ -134,11 +167,15 @@ export function getFormatter(name: string): Formatter | undefined {
 export type ExitCodeName = 'ok' | 'usage' | 'dataErr' | 'noInput' | 'software' | 'config';
 
 export function createExitCodeTable(): Readonly<Record<ExitCodeName, number>> {
-  throw new Error('TODO 5.5: 实现 createExitCodeTable');
+  return Object.freeze({ ok:0, usage:64, dataErr:65, noInput:66, software:70, config:78 });
 }
 
 export function exitCodeOf(name: string): number | undefined {
-  throw new Error('TODO 5.5: 实现 exitCodeOf');
+  const t = createExitCodeTable();
+  for (const [k,v] of Object.entries(t)) {
+    if (k === name) return v;
+  }
+  return;
 }
 
 /**
@@ -176,7 +213,29 @@ export interface PackageSpec {
 }
 
 export function parsePackageName(spec: string): PackageSpec {
-  throw new Error('TODO 5.6: 实现 parsePackageName');
+  if (spec == null || spec.trim().length === 0) throw new Error('invalid package spec');
+  let ps: PackageSpec = { scope:undefined, name:'', version:undefined, isBuiltin:false };
+  let pack = spec;
+  if (spec.includes('/')) {
+    const [sco, pkg] = spec.split('/');
+    if (sco == null || sco.trim() === '' || pkg == null || pkg.trim() === '') throw new Error('invalid package spec');
+    pack = pkg as string;
+    if (sco?.startsWith('@')) ps.scope = sco;
+  }
+  if (spec.startsWith('node:')) {
+    pack = spec.slice('node:'.length);
+    ps.isBuiltin = true;
+  }
+  if (pack == null || pack.trim().length === 0) throw new Error('invalid package spec');
+  if (pack.includes('@')) {
+    const [pkg, ver] = pack.split('@');
+    if (pkg == null || pkg.trim() === '' ||  ver == null || ver.trim() === '') throw new Error('invalid package spec');
+    ps.name = pkg as string;
+    ps.version = ver as string;
+  } else {
+    ps.name = pack;
+  }
+  return ps;
 }
 
 /**
@@ -201,7 +260,34 @@ export function parsePackageName(spec: string): PackageSpec {
  * satisfiesCaret('1.10.0', '^1.9.0') === true    // 😱 别按字符串比大小
  */
 export function satisfiesCaret(version: string, range: string): boolean {
-  throw new Error('TODO 5.7: 实现 satisfiesCaret');
+  const parseVer = (_ver: string): [number, number, number] => {
+    if (_ver == null || _ver.trim().length === 0) throw new Error('invalid version');
+    const vs = _ver.split('.');
+    if (vs.length !== 3) throw new Error('invalid version');
+    for (const v of vs) {
+      if (!/^\d+$/.test(v)) throw new Error('invalid version');
+    }
+    return vs.map(v => parseInt(v)) as [number, number, number];
+  };
+  if (range == null || range.trim().length === 0) throw new Error('invalid version');
+  if (!range.startsWith('^')) throw new Error('invalid version');
+  const [a, b, c] = parseVer(range.slice(1));
+  const [x, y, z] = parseVer(version);
+  if (a >= 1) {
+    if (x != a) return false;
+    else if (y < b) return false;
+    else if (y === b && z < c) return false;
+    return true;
+  } else if (a === 0) {
+    if (b > 0) {
+      if (b !== y) return false;
+      else if (z < c) return false;
+      return true;
+    } else if (b === 0) {
+      return c == z;
+    }
+  }
+  throw new Error('invalid version')
 }
 
 /**
@@ -234,7 +320,30 @@ export type ExportCondition = Record<string, string>;
 export type ExportsField = string | Record<string, string | ExportCondition>;
 
 export function resolveExports(exportsField: ExportsField, subpath: string): string | undefined {
-  throw new Error('TODO 5.8: 实现 resolveExports');
+  if (typeof exportsField === 'string') {
+    if (subpath === '.') return exportsField;
+    return undefined;
+  }
+  const matchPath = (ec: string|ExportCondition) => {
+      if (typeof ec === 'string') return ec;
+      else {
+        if (Object.hasOwn(ec, 'node')) return ec.node;
+        if (Object.hasOwn(ec, 'import')) return ec.import;
+        if (Object.hasOwn(ec, 'default')) return ec.default;
+      }
+      return undefined;
+  };
+  for (const [k, ec] of Object.entries(exportsField)) {
+    if (k === subpath) return matchPath(ec);
+  }
+  for (const [k, ec] of Object.entries(exportsField)) {
+    if (k.endsWith('*') && k.slice(0, k.length-1) === subpath.slice(0, k.length-1)) {
+      const t = subpath.slice(k.length-1);
+      if (t == null || t.length === 0) return undefined;
+      return matchPath(ec)?.replace('*', t);
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -275,5 +384,13 @@ export type ImportErrorKind =
   | 'unknown';
 
 export function classifyImportError(message: string): ImportErrorKind {
-  throw new Error('TODO 5.9: 实现 classifyImportError');
+  if (message.includes('ERR_REQUIRE_ESM')) return 'require-esm';
+  else if (message.includes('Cannot use import statement outside a module')) return 'import-outside-module';
+  else if (message.includes('__dirname is not defined') || message.includes('require is not defined')) return 'cjs-global-in-esm';
+  else if (message.includes('ERR_UNSUPPORTED_DIR_IMPORT')) return 'unsupported-dir-import';
+  else if (message.includes('ERR_MODULE_NOT_FOUND')) {
+    if (message.includes('Did you mean to import')) return 'missing-extension';
+    return 'module-not-found';
+  }
+  return 'unknown';
 }
