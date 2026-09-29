@@ -16,6 +16,8 @@
  * =====================================================================
  */
 
+import { resolve } from "node:dns";
+
 // =====================================================================
 // 公共错误类型（已给出实现，不用改；两处文件保持一致）
 // =====================================================================
@@ -52,7 +54,7 @@ export class AbortError extends Error {
  * 返回值必须是 undefined（不是数字，别把 setTimeout 的返回值 resolve 出去）。
  */
 export function sleep(ms: number): Promise<void> {
-  throw new Error('TODO 6.1: 实现 sleep');
+  return new Promise((rs) => setTimeout(rs, ms));
 }
 
 /**
@@ -76,7 +78,17 @@ export function sleep(ms: number): Promise<void> {
  * 提示：`setTimeout(fn, 0)` 不等于"立刻"，它排在**所有**微任务后面。
  */
 export function executionOrder(): Promise<string[]> {
-  throw new Error('TODO 6.2: 实现 executionOrder');
+  const arr: string[] = [];
+  return new Promise((rs, rj) => {
+    arr.push('sync-1');
+    setTimeout(() => {
+      arr.push('macro');
+      rs(arr);
+    });
+    Promise.resolve().then(() => arr.push('micro-1'));
+    queueMicrotask(() => arr.push('micro-2'));
+    arr.push('sync-2');
+  });
 }
 
 /**
@@ -102,7 +114,17 @@ export type NodeCallback<T> = (err: Error | null | undefined, value?: T) => void
 export function promisifyCallback<A extends unknown[], T>(
   fn: (...args: [...A, NodeCallback<T>]) => void,
 ): (...args: A) => Promise<T> {
-  throw new Error('TODO 6.3: 实现 promisifyCallback');
+  return (...args: A): Promise<T> => 
+    new Promise<T>((rs, rj) => {
+      const cb: NodeCallback<T> = (err, value) => {
+        if (err != null) {
+          rj(err);
+          return;
+        }
+        rs(value as T);
+      }
+      fn(...args, cb);
+    });
 }
 
 /**
@@ -120,7 +142,13 @@ export function promisifyCallback<A extends unknown[], T>(
  *   - ⚠️ 注意这只是"不再等待"，被超时的任务**仍在后台跑**（真正的取消见 6.6 / 6.10）
  */
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  throw new Error('TODO 6.4: 实现 withTimeout');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((rs, rj) => {
+    timer = setTimeout(() => rj(new TimeoutError(ms)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
 }
 
 /**
@@ -152,7 +180,20 @@ export interface SettledSummary<T> {
 export function allSettledSummary<T>(
   promises: ReadonlyArray<Promise<T>>,
 ): Promise<SettledSummary<T>> {
-  throw new Error('TODO 6.5: 实现 allSettledSummary');
+  const res: SettledSummary<T> = { total: 0, values: [], reasons: [], ok: true };
+  const fn = async () => {
+    const results = await Promise.allSettled(promises);
+    for (const r of results) {
+      res.total++;
+      if (r.status === 'fulfilled') res.values.push(r.value);
+      else {
+        res.ok = false;
+        res.reasons.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
+      }
+    }
+    return res;
+  }
+  return fn();
 }
 
 /**
@@ -174,7 +215,18 @@ export function allSettledSummary<T>(
  * 要求：reject 的错误 `name` 必须是 'AbortError'（用上面导出的 AbortError 类）。
  */
 export function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
-  throw new Error('TODO 6.6: 实现 abortableDelay');
+  return new Promise((rs, rj) => {
+    if (signal?.aborted === true) return rj(new AbortError());
+    const onAbort = () => {
+      clearTimeout(timer);
+      rj(new AbortError());
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      rs();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { 'once': true });
+  });
 }
 
 /**
@@ -219,11 +271,34 @@ export interface RetryOptions {
   onRetry?: (info: { attempt: number; delayMs: number; error: unknown }) => void;
 }
 
-export function retry<T>(
+export async function retry<T>(
   fn: (attempt: number) => Promise<T>,
   options: RetryOptions,
 ): Promise<T> {
-  throw new Error('TODO 6.7: 实现 retry');
+  const {
+    retries,
+    baseDelayMs,
+    factor = 2,
+    maxDelayMs = Infinity,
+    jitter = (d) => d,
+    sleep = (ms) => new Promise((rs) => setTimeout(rs, ms)),
+    shouldRetry = (e, r) => true,
+    onRetry
+  } = options;
+  for (let rt = 1; ; rt++) {
+    try {
+      return await fn(rt);
+    } catch (e) {
+      if (rt >= retries+1 || !shouldRetry(e, rt)) {
+        throw e;
+      }
+
+      const raw = baseDelayMs * factor ** (rt - 1);
+      const delay = jitter(Math.min(raw, maxDelayMs));
+      onRetry?.({ attempt:rt, delayMs:delay, error:e });
+      await sleep(delay);
+    }
+  }
 }
 
 /**
@@ -247,7 +322,21 @@ export function mapConcurrent<T, R>(
   limit: number,
   fn: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
-  throw new Error('TODO 6.8: 实现 mapConcurrent');
+  if (items.length === 0) return Promise.resolve([]);
+  if (limit <= 0) limit = 1;
+  const batchSize = Math.min(limit, items.length);
+  const results = new Array<R>(items.length);
+  const jobs = items.map((v, i) => ({item:v, index:i}));
+  let cur = 0;
+  async function worker() {
+    for (;;) {
+      const job = jobs[cur];
+      cur++;
+      if (job === undefined) return;
+      results[job.index] = await fn(job.item, job.index);
+    }
+  }
+  return Promise.all(Array.from({length:batchSize}, () => worker())).then(() => results);
 }
 
 /**
@@ -278,7 +367,19 @@ export interface SerialQueue {
 }
 
 export function createSerialQueue(): SerialQueue {
-  throw new Error('TODO 6.9: 实现 createSerialQueue');
+  let dummy:Promise<unknown> = Promise.resolve();
+  let pend = 0;
+  return {
+    get pending() {
+      return pend;
+    },
+    run: <T>(t: () => Promise<T>) => {
+      pend++;
+      const result = dummy.then(() => t());
+      dummy = result.catch(() => undefined);
+      return result.finally(() => {pend--;});
+    }
+  }
 }
 
 /**
@@ -304,7 +405,17 @@ export function createSerialQueue(): SerialQueue {
 export function raceWithCleanup<T>(
   tasks: ReadonlyArray<(signal: AbortSignal) => Promise<T>>,
 ): Promise<T> {
-  throw new Error('TODO 6.10: 实现 raceWithCleanup');
+  if (tasks.length === 0) return Promise.reject(new Error('no tasks'));
+  const ctls: AbortController[] = [];
+  const runs: Promise<T>[] = [];
+  for (const t of tasks) {
+    const ctl = new AbortController();
+    ctls.push(ctl);
+    const _t = (async () =>  t(ctl.signal))();
+    runs.push(_t);
+  }
+  const clean = () => ctls.forEach(c => c.abort());
+  return Promise.race(runs).then((v) => {clean();return v}, (e) => {clean(); throw e});
 }
 
 /**
@@ -336,7 +447,15 @@ export interface Page<T> {
 export async function* paginate<T>(
   fetchPage: (cursor: string | undefined) => Promise<Page<T>>,
 ): AsyncGenerator<T, void, undefined> {
-  throw new Error('TODO 6.11: 实现 paginate');
+  let cur: string | undefined;
+  while (true) {
+    const page = await fetchPage(cur);
+    for (const item of page.items) {
+      yield item;
+    }
+    if (page.nextCursor == null) break;
+    cur = page.nextCursor;
+  }
 }
 
 /**
@@ -368,5 +487,52 @@ export function debounceAsync<A extends unknown[], R>(
   fn: (...args: A) => Promise<R>,
   waitMs: number,
 ): DebouncedAsync<A, R> {
-  throw new Error('TODO 6.12: 实现 debounceAsync');
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastArgs: A | null = null;
+  let sharePromise: Promise<R> | null = null;
+  let shareResolve: ((value: R | PromiseLike<R>) => void) | null = null;
+  let shareReject: ((reason?: any) => void) | null = null;
+
+  const clearTimer = () => {
+    if (timer != null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+  const clearContext = () => {
+    lastArgs = null;
+    sharePromise = null;
+    shareResolve = null;
+    shareReject = null;
+  };
+
+  const debounce = (...args: A) => {
+    lastArgs = args;
+    if (sharePromise == null) {
+      sharePromise = new Promise<R>((rs, rj) => {
+        shareResolve = rs;
+        shareReject = rj;
+      });
+    }
+    clearTimer();
+    timer = setTimeout(exec, waitMs);
+    return sharePromise;
+  }
+
+  const exec = () => {
+    timer = null;
+    const _args = lastArgs;
+    const _resolve = shareResolve;
+    const _reject = shareReject;
+    clearContext();
+    Promise.resolve().then(() => fn(..._args as A)).then(_resolve, _reject);
+  }
+  debounce.cancel = () => {
+    clearTimer();
+    if (shareReject != null) {
+      shareReject(new AbortError());
+      clearContext();
+    }
+  }
+  return debounce;
 }
