@@ -42,7 +42,25 @@ import { z } from 'zod';
  * toError({ a: 1 }).message    === '{"a":1}'
  */
 export function toError(value: unknown): Error {
-  throw new Error('TODO 7.1: 实现 toError');
+  if (value instanceof Error) return value;
+  let msg = '';
+  if (typeof value === 'string') msg = value;
+  else {
+    if (value !== null && typeof value === 'object') {
+      const v = value as {message: any};
+      if (v.message != null && v.message.length > 0) msg = v.message;
+      else {
+        try {
+          msg = JSON.stringify(v);
+        } catch (Error) {
+          msg = '[unserializable value]'
+        }
+      }
+    } else {
+      msg = String(value);
+    }
+  }
+  return new Error(msg, {cause: value});
 }
 
 /**
@@ -71,7 +89,7 @@ export class AppError extends Error {
   constructor(code: string, message: string, options?: ErrorOptions) {
     super(message, options);
     this.code = code;
-    throw new Error('TODO 7.2: 完成 AppError（还差 name，并且要让子类自动拿到自己的类名）');
+    this.name = new.target.name;
   }
 }
 
@@ -100,7 +118,13 @@ export class ConfigError extends AppError {
  * getRootCause(new Error('x', { cause: 'not an error' }))  // 返回那个 Error 本身
  */
 export function getRootCause(error: Error): Error {
-  throw new Error('TODO 7.3: 实现 getRootCause');
+  const vt = new Set<Error>();
+  let cur = error;
+  while (cur != null && cur.cause != null && cur.cause instanceof Error && !vt.has(cur.cause)) {
+    vt.add(cur);
+    cur = cur.cause;
+  }
+  return cur;
 }
 
 /**
@@ -133,31 +157,36 @@ export interface Err<E> {
 export type Result<T, E> = Ok<T> | Err<E>;
 
 export function ok<T>(value: T): Result<T, never> {
-  throw new Error('TODO 7.4: 实现 ok');
+  return {ok: true, value: value};
 }
 
 export function err<E>(error: E): Result<never, E> {
-  throw new Error('TODO 7.4: 实现 err');
+  return {ok: false, error: error};
 }
 
 export function isOk<T, E>(result: Result<T, E>): result is Ok<T> {
-  throw new Error('TODO 7.4: 实现 isOk');
+  return result.ok;
 }
 
 export function isErr<T, E>(result: Result<T, E>): result is Err<E> {
-  throw new Error('TODO 7.4: 实现 isErr');
+  return !result.ok;
 }
 
 export function mapResult<T, E, U>(result: Result<T, E>, fn: (value: T) => U): Result<U, E> {
-  throw new Error('TODO 7.4: 实现 mapResult');
+  if (result.ok) return {ok: true, value: fn(result.value)};
+  else return {ok: false, error: result.error};
 }
 
 export function mapErrResult<T, E, F>(result: Result<T, E>, fn: (error: E) => F): Result<T, F> {
-  throw new Error('TODO 7.4: 实现 mapErrResult');
+  if (!result.ok) return {ok: false, error: fn(result.error)};
+  else return {ok: true, value: result.value};
 }
 
 export function unwrapOr<T, E>(result: Result<T, E>, fallback: T): T {
-  throw new Error('TODO 7.4: 实现 unwrapOr');
+  if (result.ok && result.value != null) {
+    return result.value;
+  }
+  return fallback;
 }
 
 /**
@@ -173,7 +202,18 @@ export function unwrapOr<T, E>(result: Result<T, E>, fallback: T): T {
  * collectResults([])                           -> { ok: true,  value: [] }
  */
 export function collectResults<T, E>(results: readonly Result<T, E>[]): Result<T[], E[]> {
-  throw new Error('TODO 7.5: 实现 collectResults');
+  const v = [];
+  const e = [];
+  let ok = true;
+  for (let r of results) {
+    if (r.ok) v.push(r.value);
+    else {
+      ok = false;
+      e.push(r.error);
+    }
+  }
+  if (ok) return {ok: true, value: v};
+  return {ok: false, error: e};
 }
 
 /**
@@ -210,11 +250,15 @@ export interface User {
 }
 
 export function isUser(value: unknown): value is User {
-  throw new Error('TODO 7.6: 实现 isUser');
+  if (typeof value === 'object' && value != null) {
+    const v = value as {id: number, name: string, email?: string};
+    if (v.id != null && Number.isInteger(v.id) && v.name != null && typeof v.name === 'string' && (v.email === undefined || (v.email != null && typeof v.email === 'string'))) return true;
+  }
+  return false;
 }
 
 export function assertNonNull<T>(value: T | null | undefined, name: string): asserts value is T {
-  throw new Error('TODO 7.6: 实现 assertNonNull');
+  if (value == null) throw new AppError('E_NULL', name + ' is null or undefined');
 }
 
 /**
@@ -235,7 +279,12 @@ export function assertNonNull<T>(value: T | null | undefined, name: string): ass
  *   -> ['(root): 必须是字符串']
  */
 export function formatZodError(error: z.ZodError): string[] {
-  throw new Error('TODO 7.7: 实现 formatZodError');
+  const res = [];
+  for (const iss of error.issues) {
+    const p = iss.path.join('.') || '(root)';
+    res.push(p + ': ' + iss.message);
+  }
+  return res;
 }
 
 /**
@@ -276,17 +325,25 @@ export function formatZodError(error: z.ZodError): string[] {
  *                           'port: port 必须在 1~65535 之间',
  *                           'db.url: db.url 必须是字符串'] }
  */
-export interface Config {
-  name: string;
-  port: number;
-  logLevel: 'debug' | 'info' | 'warn' | 'error';
-  retries: number;
-  db: { url: string; poolSize: number };
-  tags: string[];
-}
+const ConfigSchema = z.strictObject(
+  {
+    name: z.string({error:'name 必须是字符串'}).min(1,{error:'name 不能为空'}),
+    port: z.number({error:'port 必须是数字'}).int({error:'port 必须是整数'}).min(1,{error:'port 必须在 1~65535 之间'}).max(65535,{error:'port 必须在 1~65535 之间'}),
+    logLevel: z.enum(['debug','info','warn','error'],{error:'logLevel 只能是 debug|info|warn|error'}).default('info'),
+    retries: z.number({error:'retries 必须在 0~10 之间'}).int({error:'retries 必须在 0~10 之间'}).min(0,{error:'retries 必须在 0~10 之间'}).max(10,{error:'retries 必须在 0~10 之间'}).default(3),
+    db: z.object({
+      url: z.string({error:'db.url 必须是字符串'}).min(1,{error:'db.url 不能为空'}),
+      poolSize: z.number({error:'db.poolSize 必须是正整数'}).int({error:'db.poolSize 必须是正整数'}).min(1,{error:'db.poolSize 必须是正整数'}).default(5)
+    }),
+    tags: z.array(z.string({error:'tags 的每一项都必须是字符串'})).default([])
+  }
+)
+
+export type Config = z.infer<typeof ConfigSchema>;
 
 export function loadConfig(raw: unknown): Result<Config, string[]> {
-  throw new Error('TODO 7.8: 实现 loadConfig');
+  const p = ConfigSchema.safeParse(raw);
+  return p.success ? ok(p.data) : err(formatZodError(p.error));
 }
 
 /**
@@ -321,15 +378,36 @@ export function loadConfig(raw: unknown): Result<Config, string[]> {
  * loadEnv({ API_KEY: '' })                 -> { ok: false, error: ['API_KEY: API_KEY 必须是字符串'] }
  *   ↑ 空串被①的过滤当成"没设置"，所以报的是"必须是字符串"（缺字段）而不是"不能为空"
  */
-export interface EnvConfig {
-  API_KEY: string;
-  PORT: number;
-  TIMEOUT_MS: number;
-  DEBUG: boolean;
-}
+const EnvSchema = z.object({
+  API_KEY: z.string({ error: 'API_KEY 必须是字符串' }).min(1, { error: 'API_KEY 不能为空' }),
+  PORT: z
+    .coerce
+    .number({ error: 'PORT 必须是数字' })
+    .int({ error: 'PORT 必须是整数' })
+    .min(1, { error: 'PORT 必须在 1~65535 之间' })
+    .max(65535, { error: 'PORT 必须在 1~65535 之间' })
+    .default(3000),
+  TIMEOUT_MS: z
+    .coerce
+    .number({ error: 'TIMEOUT_MS 必须是数字' })
+    .int({ error: 'TIMEOUT_MS 必须是正整数' })
+    .positive({ error: 'TIMEOUT_MS 必须是正整数' })
+    .default(5000),
+  DEBUG: z
+    .string()
+    .optional()
+    .transform((v) => v === '1' || v === 'true'),
+});
+
+export type EnvConfig = z.infer<typeof EnvSchema>;
 
 export function loadEnv(env: Record<string, string | undefined>): Result<EnvConfig, string[]> {
-  throw new Error('TODO 7.9: 实现 loadEnv');
+  const p: Record<string, string> = {}
+  for (const [k, v] of Object.entries(env)) {
+    if (v != null && v.trim() !== '') p[k] = v;
+  }
+  const e = EnvSchema.safeParse(p);
+  return e.success ? ok(e.data) : err(formatZodError(e.error));
 }
 
 /**
@@ -354,13 +432,38 @@ export function loadEnv(env: Record<string, string | undefined>): Result<EnvConf
  * parseCliEvent({ type: 'nope' })
  *   -> { ok: false, error: ['type: ...'] }        // 只有一条，且以 'type: ' 开头
  */
-export type CliEvent =
-  | { type: 'start'; command: string; at: number }
-  | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string }
-  | { type: 'exit'; code: number };
+// export type CliEvent =
+//   | { type: 'start'; command: string; at: number }
+//   | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string }
+//   | { type: 'exit'; code: number };
+
+const CliEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('start'),
+    command: z.string({ error: 'command 不能为空' }).min(1, { error: 'command 不能为空' }),
+    at: z
+      .number({ error: 'at 必须是非负整数' })
+      .int({ error: 'at 必须是非负整数' })
+      .nonnegative({ error: 'at 必须是非负整数' }),
+  }),
+  z.object({
+    type: z.literal('log'),
+    level: z.enum(['debug', 'info', 'warn', 'error'], {
+      error: 'level 只能是 debug|info|warn|error',
+    }),
+    message: z.string({ error: 'message 必须是字符串' }),
+  }),
+  z.object({
+    type: z.literal('exit'),
+    code: z.number({ error: 'code 必须是整数' }).int({ error: 'code 必须是整数' }),
+  }),
+]);
+
+export type CliEvent = z.infer<typeof CliEventSchema>;
 
 export function parseCliEvent(raw: unknown): Result<CliEvent, string[]> {
-  throw new Error('TODO 7.10: 实现 parseCliEvent');
+  const parsed = CliEventSchema.safeParse(raw);
+  return parsed.success ? ok(parsed.data) : err(formatZodError(parsed.error));
 }
 
 /**
@@ -386,6 +489,20 @@ export function parseCliEvent(raw: unknown): Result<CliEvent, string[]> {
  * parseTimeRange({ start: 'a', end: 1 })
  *   -> { ok: false, error: ['start: start 必须是非负整数'] }        // 只有一条
  */
+const TimeRangeSchema = z
+  .object({
+    start: z
+      .number({ error: 'start 必须是非负整数' })
+      .int({ error: 'start 必须是非负整数' })
+      .nonnegative({ error: 'start 必须是非负整数' }),
+    end: z
+      .number({ error: 'end 必须是非负整数' })
+      .int({ error: 'end 必须是非负整数' })
+      .nonnegative({ error: 'end 必须是非负整数' }),
+    label: z.string({ error: 'label 不能为空' }).min(1, { error: 'label 不能为空' }).default('range'),
+  })
+  .refine((v) => v.start < v.end, { error: 'start 必须严格小于 end', path: ['start'] });
+
 export interface TimeRange {
   start: number;
   end: number;
@@ -393,7 +510,8 @@ export interface TimeRange {
 }
 
 export function parseTimeRange(raw: unknown): Result<TimeRange, string[]> {
-  throw new Error('TODO 7.11: 实现 parseTimeRange');
+  const parsed = TimeRangeSchema.safeParse(raw);
+  return parsed.success ? ok(parsed.data) : err(formatZodError(parsed.error));
 }
 
 /**
@@ -424,5 +542,15 @@ export function partitionParse<T>(
   schema: z.ZodType<T>,
   inputs: readonly unknown[],
 ): PartitionResult<T> {
-  throw new Error('TODO 7.12: 实现 partitionParse');
+  const valid: T[] = [];
+  const invalid: PartitionResult<T>['invalid'] = [];
+  for (const [idx,inp] of inputs.entries()) {
+    const p = schema.safeParse(inp);
+    if (p.success) {
+      valid.push(p.data);
+    } else {
+      invalid.push({index: idx, input: inp, errors:formatZodError(p.error)});
+    }
+  }
+  return { valid, invalid };
 }
